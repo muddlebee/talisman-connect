@@ -1,9 +1,12 @@
-import type { Signer as InjectedSigner } from '@polkadot/api/types'
+import type {
+  InjectedPolkadotAccount,
+  InjectedExtension as PapiInjectedExtension,
+} from 'polkadot-api/pjs-signer'
+import type { PolkadotSigner } from 'polkadot-api/signer'
 import {
-  InjectedAccount,
-  InjectedExtension,
-  InjectedWindow,
-} from '@polkadot/extension-inject/types'
+  connectInjectedExtension,
+  getInjectedExtensions,
+} from 'polkadot-api/pjs-signer'
 
 import { SubscriptionFn, Wallet, WalletAccount } from '../../types'
 import { AuthError } from '../errors/AuthError'
@@ -20,30 +23,20 @@ export class BaseDotsamaWallet implements Wallet {
     alt: '',
   }
 
-  _extension: InjectedExtension | undefined
-  _signer: InjectedSigner | undefined
+  protected _extension?: PapiInjectedExtension
+  protected _signer?: PolkadotSigner
 
-  // API docs: https://polkadot.js.org/docs/extension/
   get extension() {
     return this._extension
   }
 
-  // API docs: https://polkadot.js.org/docs/extension/
   get signer() {
     return this._signer
   }
 
   get installed() {
-    const injectedWindow = window as Window & InjectedWindow
-    const injectedExtension = injectedWindow?.injectedWeb3?.[this.extensionName]
-
-    return !!injectedExtension
-  }
-
-  get rawExtension() {
-    const injectedWindow = window as Window & InjectedWindow
-    const injectedExtension = injectedWindow?.injectedWeb3?.[this.extensionName]
-    return injectedExtension
+    const extensions = getInjectedExtensions()
+    return extensions.includes(this.extensionName)
   }
 
   transformError = (err: Error): WalletError | Error => {
@@ -63,73 +56,70 @@ export class BaseDotsamaWallet implements Wallet {
         this,
       )
     }
-    try {
-      const injectedExtension = this.rawExtension
-      const rawExtension = await injectedExtension?.enable?.(dappName)
-      if (!rawExtension) {
-        throw new NotInstalledError(
-          `${this.title} is installed but is not returned by the 'Wallet.enable(dappname)' function`,
-          this,
-        )
-      }
 
-      const extension: InjectedExtension = {
-        ...rawExtension,
-        // Manually add `InjectedExtensionInfo` so as to have a consistent response.
-        name: this.extensionName,
-        version: injectedExtension.version ?? '?',
+    try {
+      const extension = await connectInjectedExtension(this.extensionName)
+      const accounts = await extension.getAccounts()
+
+      if (accounts.length === 0) {
+        throw new NotInstalledError(`No accounts found in ${this.title}`, this)
       }
 
       this._extension = extension
-      this._signer = extension?.signer
+      this._signer = accounts[0].polkadotSigner
     } catch (err) {
       throw this.transformError(err as WalletError)
     }
   }
 
   getAccounts = async (anyType?: boolean): Promise<WalletAccount[]> => {
-    if (!this._extension) {
+    if (!this._extension || !this._signer) {
       throw new NotInstalledError(
         `The 'Wallet.enable(dappname)' function should be called first.`,
         this,
       )
     }
-    const accounts = await this._extension.accounts.get(anyType)
-    const accountsWithWallet = accounts.map((account) => {
-      return {
-        ...account,
-        source: this._extension?.name as string,
-        // Added extra fields here for convenience
-        wallet: this,
-        signer: this._extension?.signer,
-      }
-    })
 
-    return accountsWithWallet
+    const accounts = await this._extension.getAccounts()
+    return accounts.map((account) => ({
+      address: account.address,
+      name: account.name,
+      source: this.extensionName,
+      wallet: this,
+      signer: this._signer,
+    }))
   }
 
   subscribeAccounts = async (callback: SubscriptionFn) => {
-    if (!this._extension) {
+    if (!this._extension || !this._signer) {
       throw new NotInstalledError(
         `The 'Wallet.enable(dappname)' function should be called first.`,
         this,
       )
     }
-    const unsubscribe = this._extension.accounts.subscribe(
-      (accounts: InjectedAccount[]) => {
-        const accountsWithWallet = accounts.map((account) => {
-          return {
-            ...account,
-            source: this._extension?.name as string,
-            // Added extra fields here for convenience
-            wallet: this,
-            signer: this._extension?.signer,
-          }
-        })
-        callback(accountsWithWallet)
-      },
-    )
 
-    return unsubscribe
+    // PAPI doesn't have a direct subscription method yet
+    // For now, we'll implement a basic polling mechanism
+    const pollInterval = 1000 // 1 second
+    let lastAccounts: string[] = []
+
+    const interval = setInterval(async () => {
+      const accounts = await this._extension!.getAccounts()
+      const currentAddresses = accounts.map((a) => a.address)
+
+      if (JSON.stringify(lastAccounts) !== JSON.stringify(currentAddresses)) {
+        lastAccounts = currentAddresses
+        const accountsWithWallet = accounts.map((account) => ({
+          address: account.address,
+          name: account.name,
+          source: this.extensionName,
+          wallet: this,
+          signer: this._signer,
+        }))
+        callback(accountsWithWallet)
+      }
+    }, pollInterval)
+
+    return () => clearInterval(interval)
   }
 }
