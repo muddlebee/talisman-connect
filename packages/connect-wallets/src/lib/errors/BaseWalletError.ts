@@ -1,5 +1,12 @@
 import { Wallet } from '../../types'
 
+// Add declaration for Error.captureStackTrace which exists in V8 environments
+declare global {
+  interface ErrorConstructor {
+    captureStackTrace?(error: Error, constructorOpt?: Function): void
+  }
+}
+
 export interface WalletError extends Error {
   readonly wallet: Wallet
 }

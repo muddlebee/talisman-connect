@@ -1,7 +1,4 @@
-import type {
-  InjectedPolkadotAccount,
-  InjectedExtension as PapiInjectedExtension,
-} from 'polkadot-api/pjs-signer'
+import type { InjectedExtension as PapiInjectedExtension } from 'polkadot-api/pjs-signer'
 import type { PolkadotSigner } from 'polkadot-api/signer'
 import {
   connectInjectedExtension,
@@ -72,7 +69,7 @@ export class BaseDotsamaWallet implements Wallet {
     }
   }
 
-  getAccounts = async (anyType?: boolean): Promise<WalletAccount[]> => {
+  getAccounts = async (): Promise<WalletAccount[]> => {
     if (!this._extension || !this._signer) {
       throw new NotInstalledError(
         `The 'Wallet.enable(dappname)' function should be called first.`,
