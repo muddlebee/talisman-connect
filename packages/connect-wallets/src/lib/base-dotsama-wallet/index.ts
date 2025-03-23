@@ -69,7 +69,8 @@ export class BaseDotsamaWallet implements Wallet {
     }
   }
 
-  getAccounts = async (): Promise<WalletAccount[]> => {
+  // @ts-ignore - Parameter required for compatibility with interface
+  getAccounts = async (anyType?: boolean): Promise<WalletAccount[]> => {
     if (!this._extension || !this._signer) {
       throw new NotInstalledError(
         `The 'Wallet.enable(dappname)' function should be called first.`,

@@ -1,3 +1,5 @@
+import type { PolkadotSigner } from 'polkadot-api/signer'
+
 import { WalletError } from './lib/errors/BaseWalletError'
 
 export type SubscriptionFn = (
@@ -16,7 +18,8 @@ export interface WalletAccount {
   source: string
   name?: string
   wallet?: Wallet
-  signer?: unknown
+  // The signer is now typed as PolkadotSigner from PAPI for better type safety
+  signer?: PolkadotSigner
 }
 
 interface WalletData {
@@ -41,20 +44,20 @@ interface WalletExtension {
   extension: any
 
   // The raw signer object for convenience. Usually the implementer can derive this from the extension object.
-  // Refer to a specific wallet's extension documentation
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  signer: any
+  // For Polkadot API (PAPI), this is a PolkadotSigner instance
+  signer: PolkadotSigner | any
 }
 
+// Updated Signer interface that aligns with PAPI's signer capabilities
 interface Signer {
-  // Sign function
+  // Legacy sign function - maintained for backward compatibility
   sign?: (address: string, payload: string) => unknown
 }
 
 interface Connector {
   enable: (dappName: string) => unknown
 
-  // Get accounts function
+  // Get accounts function - made compatible with existing code by keeping the parameter
   getAccounts: (anyType?: boolean) => Promise<WalletAccount[]>
 
   // The subscribe to accounts function

@@ -1,0 +1,1 @@
+pnpm build && pnpm link-local && pnpm dev
